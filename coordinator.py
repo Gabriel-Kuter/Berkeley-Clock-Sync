@@ -5,50 +5,71 @@ from datetime import datetime
 import argparse
 import statistics
 
-received_times = []
+received_offsets = []
 connections = []
+received_lock = threading.Lock()
+
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def handle_client(conn, addr):
+
+def handle_client(conn, addr, Tc):
     log(f"Conectado a: {addr}")
     try:
-        conn.settimeout(10.0)  # sets a 10 second timeout after connection has been estabilished
-        conn.sendall(b'REQUEST_TIME')
+        conn.settimeout(10.0)
+        t0 = time.time()
+        conn.sendall(b"REQUEST_TIME")
+
         data = conn.recv(1024)
-        local_time = float(data.decode())
-        log(f"Recebeu o horário de {addr}: {datetime.fromtimestamp(local_time).strftime('%H:%M:%S')}")
-        received_times.append((conn, local_time))
+        t2 = time.time()
+
+        client_time = float(data.decode())
+        rtt = t2 - t0
+        estimated_time = client_time + (rtt / 2)
+        offset = estimated_time - Tc  # referência global comum
+
+        log(f"t0: {t0:.3f}, t2: {t2:.3f}, RTT: {rtt:.3f}s")
+        log(
+            f"Horário cliente: {datetime.fromtimestamp(client_time).strftime('%H:%M:%S')}"
+        )
+        log(f"Offset estimado (com RTT/2): {offset:+.3f}s")
+
+        with received_lock:
+            received_offsets.append((conn, offset))
     except socket.timeout:
         log(f"[TIMEOUT] Cliente {addr} não respondeu a tempo.")
         conn.close()
-    except:
-        log(f"Erro ao se comunicar com {addr}")
+    except Exception as e:
+        log(f"Erro ao se comunicar com {addr}: {e}")
         conn.close()
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Berkeley Clock Coordinator")
-    parser.add_argument('--host', type=str, default='0.0.0.0', help='IP do host para se conectar (default: 0.0.0.0)')
-    parser.add_argument('--port', type=int, default=5000, help='Port para realizar o listen (default: 5000)')
-    parser.add_argument('--clients', type=int, default=5, help='Número de clientes esperados (default: 5)')
+    parser = argparse.ArgumentParser(description="Coordenador do algoritmo de Berkeley")
+    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--clients", type=int, default=5)
     args = parser.parse_args()
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((args.host, args.port))
     server.listen(args.clients)
-    log(f"Esperando por {args.clients} conexões em {args.host}:{args.port}...")
+    log(f"Escutando {args.host}:{args.port}, aguardando {args.clients} clientes")
 
     threads = []
+    timeout_accept = 15
     start_time = time.time()
-    timeout_accept = 15  # waits 15 seconds for the expected number of clients to connect
-    log(f"Aguardando até {args.clients} clientes por até {timeout_accept} segundos...")
+
+    Tc = time.time()  # referência comum a todos
+    log(f"Referência global de tempo (Tc): {Tc:.3f}")
+
     while len(connections) < args.clients and time.time() - start_time < timeout_accept:
         server.settimeout(1.0)
         try:
             conn, addr = server.accept()
             connections.append(conn)
-            t = threading.Thread(target=handle_client, args=(conn, addr))
+            t = threading.Thread(target=handle_client, args=(conn, addr, Tc))
             t.start()
             threads.append(t)
         except socket.timeout:
@@ -57,47 +78,47 @@ def main():
     for t in threads:
         t.join()
 
-    # counts successful responses vs expected responses
-    num_responded = len(received_times)
-    num_expected = args.clients
-    num_connected = len(connections)
-    num_failed = num_expected - num_responded
-    log(f"Clientes conectados: {num_connected}/{num_expected}")    
-    if num_connected < num_expected:
-        log(f"{num_failed} cliente(s) não se conectaram.")
-
-    if not received_times:
-        log("Nenhum horário recebido.")
+    if not received_offsets:
+        log("Nenhum cliente respondeu a tempo.")
         return
 
-    times = [t[1] for t in received_times]
-    mean = statistics.mean(times)
-    if len(times) > 1:
-        stdev = statistics.stdev(times)
-        filtered = [(conn, t) for conn, t in received_times if abs(t - mean) <= 2 * stdev]
-        log(f"Filtrando outliers: {len(received_times) - len(filtered)} removidos")
+    # Extrai os offsets e adiciona o do coordenador (0)
+    offsets = [offset for _, offset in received_offsets]
+    offsets.append(0.0)  # coordenador
+    log(f"Offset do coordenador (0.000s) incluído no cálculo")
+
+    if len(offsets) > 1:
+        mean = statistics.mean(offsets)
+        stdev = statistics.stdev(offsets)
+        filtered = [
+            (conn, o) for conn, o in received_offsets if abs(o - mean) <= 2 * stdev
+        ]
+        log(f"Outliers removidos: {len(received_offsets) - len(filtered)}")
     else:
-        filtered = received_times
+        filtered = received_offsets
 
     if not filtered:
-        log("Todos os tempos foram descartados como outliers.")
+        log("Todos os offsets foram descartados como outliers.")
         return
-    
-    filtered_times = [t for _, t in filtered]
-    final_mean = statistics.mean(filtered_times)
-    log(f"Média final (ajustada): {datetime.fromtimestamp(final_mean).strftime('%H:%M:%S')}")
 
-    for conn, t in filtered:
-        adjustment = final_mean - t
+    # Recalcular média com offsets filtrados + coordenador
+    final_offsets = [o for _, o in filtered] + [0.0]
+    offset_medio = statistics.mean(final_offsets)
+    log(f"Offset médio final: {offset_medio:+.3f} segundos")
+
+    for conn, o in filtered:
         try:
+            adjustment = offset_medio - o
             conn.sendall(str(adjustment).encode())
-            time.sleep(0.1) 
+            time.sleep(0.1)
+            conn.shutdown(socket.SHUT_RDWR)
             conn.close()
         except:
-            log("Erro ao enviar o ajuste.")
-    
+            log("Erro ao enviar ajuste ao cliente.")
+
     server.close()
-    log("Sincronização de relógios concluída!")
+    log("Sincronização concluída com sucesso.")
+
 
 if __name__ == "__main__":
     main()
