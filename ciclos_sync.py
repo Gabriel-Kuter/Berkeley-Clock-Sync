@@ -1,11 +1,30 @@
 import subprocess
 import time
+import csv
+import os
 
 NUM_CICLOS = 30
-NUM_CLIENTES = 3
-PROCESS_IDS = ["P1", "P2", "P3"]
+NUM_CLIENTES = 5
+PROCESS_IDS = [f"P{i+1}" for i in range(NUM_CLIENTES)]
 HOST = "127.0.0.1"
 PORT = "5000"
+
+# Valores mais extremos para tornar a convergência visual mais perceptível
+offsets_iniciais = {
+    "P1": 8.0,
+    "P2": -6.0,
+    "P3": 3.5,
+    "P4": -5.5,
+    "P5": 0.0,
+}
+
+
+def registrar_offset_inicial(pid, offset):
+    csv_path = f"offset_{pid}.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["cycle", "offset"])
+        writer.writerow([0, round(offset, 6)])
 
 
 def run_coordinator():
@@ -33,20 +52,24 @@ def run_client(pid, offset=None):
 
 
 def main():
-    print(f"⏳ Iniciando {NUM_CICLOS} ciclos de sincronização...\n")
+    print(
+        f"⏳ Iniciando {NUM_CICLOS} ciclos de sincronização com {NUM_CLIENTES} clientes...\n"
+    )
+    # Grava ciclo 0 com offset inicial
 
-    # Apenas no primeiro ciclo, passamos offset inicial
-    offsets_iniciais = {"P1": 5.0, "P2": -3.0, "P3": 1.5}
+    for pid in PROCESS_IDS:
+        offset = offsets_iniciais.get(pid, 0.0)
+        registrar_offset_inicial(pid, offset)
 
     for ciclo in range(1, NUM_CICLOS + 1):
         print(f"--- Ciclo {ciclo} ---")
 
         coord_proc = run_coordinator()
-        time.sleep(1.5)  # tempo para coordenador inicializar
+        time.sleep(1.5)
 
         clientes = []
         for pid in PROCESS_IDS:
-            offset = offsets_iniciais[pid] if ciclo == 1 else None
+            offset = offsets_iniciais.get(pid) if ciclo == 1 else None
             clientes.append(run_client(pid, offset))
 
         for proc in clientes:
