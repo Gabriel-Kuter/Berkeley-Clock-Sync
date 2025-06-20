@@ -93,7 +93,7 @@ def gerar_ponteiros_analogicos(timestamp):
         yaxis=dict(
             range=[1.2, -1.2], showgrid=False, zeroline=False, showticklabels=False
         ),  # inverte o Y
-        margin=dict(l=0, r=0, t=0, b=0),
+        margin=dict(l=30, r=30, t=60, b=100),
         plot_bgcolor="black",
         paper_bgcolor="black",
     )
@@ -176,7 +176,14 @@ def gerar_grafico_geral():
         plot_bgcolor="rgba(0,0,0,0)",
         height=300,
         margin=dict(l=30, r=30, t=40, b=40),
-        legend=dict(orientation="h", x=0.5, xanchor="center"),
+        legend=dict(
+            orientation="h",
+            x=0.5,
+            y=-0.25,
+            xanchor="center",
+            yanchor="top",
+            bgcolor="rgba(0,0,0,0)",  # transparente
+        ),
     )
     return fig
 
