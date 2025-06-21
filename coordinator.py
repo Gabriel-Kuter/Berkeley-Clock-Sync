@@ -14,7 +14,7 @@ def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 
-def handle_client(conn, addr, Tc):
+def handle_client(conn, addr):
     log(f"Conectado a: {addr}")
     try:
         conn.settimeout(10.0)
@@ -26,8 +26,8 @@ def handle_client(conn, addr, Tc):
 
         client_time = float(data.decode())
         rtt = t2 - t0
-        estimated_time = client_time + (rtt / 2)
-        offset = estimated_time - Tc  # referência global comum
+        coord_midpoint = t0 + rtt / 2
+        offset = client_time - coord_midpoint
 
         log(f"t0: {t0:.3f}, t2: {t2:.3f}, RTT: {rtt:.3f}s")
         log(
@@ -61,15 +61,12 @@ def main():
     timeout_accept = 15
     start_time = time.time()
 
-    Tc = time.time()  # referência comum a todos
-    log(f"Referência global de tempo (Tc): {Tc:.3f}")
-
     while len(connections) < args.clients and time.time() - start_time < timeout_accept:
         server.settimeout(1.0)
         try:
             conn, addr = server.accept()
             connections.append(conn)
-            t = threading.Thread(target=handle_client, args=(conn, addr, Tc))
+            t = threading.Thread(target=handle_client, args=(conn, addr))
             t.start()
             threads.append(t)
         except socket.timeout:

@@ -11,10 +11,10 @@ PORT = "5000"
 
 # Valores mais extremos para tornar a convergência visual mais perceptível
 offsets_iniciais = {
-    "P1": 8.0,
+    "P1": 16.0,
     "P2": -6.0,
-    "P3": 3.5,
-    "P4": -5.5,
+    "P3": 12.5,
+    "P4": -10.5,
     "P5": 2.0,
 }
 
@@ -65,7 +65,6 @@ def main():
         print(f"--- Ciclo {ciclo} ---")
 
         coord_proc = run_coordinator()
-        time.sleep(1.5)
 
         clientes = []
         for pid in PROCESS_IDS:
