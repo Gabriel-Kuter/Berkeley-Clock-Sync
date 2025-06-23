@@ -8,6 +8,13 @@ from datetime import datetime
 import math
 import pandas as pd
 
+"""
+Dashboard didático do Algoritmo de Berkeley para sincronização de relógios em sistemas distribuídos.
+Utiliza os valores salvos localmente de offset e de ciclos para plotar dinamicamente gráficos, demonstrando a 
+convergência dos horários. 
+"""
+
+# Detecta processos automaticamente com base em arquivos .txt
 PROCESSOS = sorted(
     [
         f.split("_")[1].split(".")[0]
@@ -16,11 +23,15 @@ PROCESSOS = sorted(
     ]
 )
 
+# Inicializa o app Dash
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SLATE])
-app.title = "Painel Berkeley Avançado"
+app.title = "Painel de Berkeley"
 
 
 def obter_offset(pid):
+    """
+    Lê o offset atual salvo em 'offset_<pid>.txt'
+    """
     try:
         with open(f"offset_{pid}.txt", "r") as f:
             return float(f.read().strip())
@@ -29,10 +40,17 @@ def obter_offset(pid):
 
 
 def formatar_horario(timestamp):
+    """
+    Converte timestamp para string formatada: HH:MM:SS
+    """
     return datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
 
 
 def gerar_ponteiros_analogicos(timestamp):
+    """
+    Gera um gráfico que simula os ponterios de um relógio analógico (plotly) baseado em timestamp
+    Inclui ponteiros de horas, minutos e segundos.
+    """
     dt = datetime.fromtimestamp(timestamp)
     h = dt.hour % 12
     m = dt.minute
@@ -85,6 +103,7 @@ def gerar_ponteiros_analogicos(timestamp):
         go.Scatter(x=[0, sx], y=[0, sy], mode="lines", line=dict(width=1, color="red"))
     )
 
+    # Configura layout do gráfico
     fig.update_layout(
         showlegend=False,
         xaxis=dict(
@@ -92,7 +111,7 @@ def gerar_ponteiros_analogicos(timestamp):
         ),
         yaxis=dict(
             range=[1.2, -1.2], showgrid=False, zeroline=False, showticklabels=False
-        ),  # inverte o Y
+        ),  # inverte o Y (já que o gráfico é plotado em um plano cartesiano, o 12 ficaria embaixo e o 6 em cima)
         margin=dict(l=30, r=30, t=60, b=100),
         plot_bgcolor="black",
         paper_bgcolor="black",
@@ -102,6 +121,9 @@ def gerar_ponteiros_analogicos(timestamp):
 
 
 def construir_card(pid, agora, offset):
+    """
+    Constrói um carda para cada processo, com horário ajustado, delta e relógio analógico logo abaixo.
+    """
     if offset is None:
         return dbc.Card(
             dbc.CardBody(
@@ -138,18 +160,21 @@ def construir_card(pid, agora, offset):
 
 
 def gerar_grafico_geral():
+    """
+    Gera gráfico de linha com a evolução dos offsets de cada processo ao longo dos ciclos.
+    """
     fig = go.Figure()
     cores = [
-        "#00BFFF",  # azul claro
-        "#FF69B4",  # rosa choque
-        "#FFD700",  # amarelo ouro
-        "#7CFC00",  # verde-limão
-        "#FF4500",  # laranja avermelhado
-        "#9A32CD",  # roxo médio
-        "#40E0D0",  # turquesa
-        "#FF1493",  # rosa profundo
-        "#00FA9A",  # verde médio
-        "#DC143C",  # vermelho cereja
+        "#00BFFF",
+        "#FF69B4",
+        "#FFD700",
+        "#7CFC00",
+        "#FF4500",
+        "#9A32CD",
+        "#40E0D0",
+        "#FF1493",
+        "#00FA9A",
+        "#DC143C",
     ]  # Uma cor por processo
 
     for i, pid in enumerate(PROCESSOS):
@@ -227,6 +252,12 @@ app.layout = dbc.Container(
     Input("intervalo-atualizacao", "n_intervals"),
 )
 def atualizar_painel(n):
+    """
+    Atualiza o dashboard a cada intervalo:
+    - Atualiza relógio do coordenador
+    - Atualiza cards de cada processo
+    - Atualiza o gráfico geral
+    """
     agora = time.time()
     cards = []
     for pid in PROCESSOS:
@@ -248,6 +279,10 @@ def atualizar_painel(n):
     prevent_initial_call=True,
 )
 def resetar_simulacao(n):
+    """
+    Callback do botão de reset:
+    Remove arquivos .txt e .csv de offset dos processos
+    """
     count = 0
     for pid in PROCESSOS:
         for ext in [".txt", ".csv"]:

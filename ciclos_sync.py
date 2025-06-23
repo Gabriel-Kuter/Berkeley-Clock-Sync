@@ -3,13 +3,18 @@ import time
 import csv
 import os
 
+"""
+Script auxiliar para demonstrar didaticamente o Algoritmo de Berkeley para sincronização de relógios.
+Essencialmente, automatiza o processo de envio e ajuste de offsets, de forma que, no dashboard,
+haja uma experiência bem orgânica/prática de visualização. Ainda utiliza exatamente o mesmo algoritmo da
+versão distribuída.
+"""
 NUM_CICLOS = 30
 NUM_CLIENTES = 5
 PROCESS_IDS = [f"P{i+1}" for i in range(NUM_CLIENTES)]
 HOST = "127.0.0.1"
 PORT = "5000"
 
-# Valores mais extremos para tornar a convergência visual mais perceptível
 offsets_iniciais = {
     "P1": 16.0,
     "P2": -6.0,
@@ -20,6 +25,12 @@ offsets_iniciais = {
 
 
 def registrar_offset_inicial(pid, offset):
+    """
+    Cria o arquivo CSV de offset para o processo com o valor inicial (ciclo 0)
+
+    :param pid: ID do processo (ex: "P1")
+    :param offset: Offset inicial a ser registrado
+    """
     csv_path = f"offset_{pid}.csv"
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
@@ -28,6 +39,11 @@ def registrar_offset_inicial(pid, offset):
 
 
 def run_coordinator():
+    """
+    Inicia o processo do coordenador como subprocesso, escutando o número esperado de clientes.
+
+    :return: Popen do coordenador
+    """
     return subprocess.Popen(
         [
             "python",
@@ -45,6 +61,14 @@ def run_coordinator():
 
 
 def run_client(pid, offset=None):
+    """
+    Inicia um cliente (processo) como subprocesso.
+    Se for o primeiro ciclo, envia o offset inicial.
+
+    :param pid: ID do processo (ex: "P1")
+    :param offset: Offset inicial opcional
+    :return: Popen do cliente
+    """
     cmd = ["python", "process.py", "--host", HOST, "--port", PORT, "--id", pid]
     if offset is not None:
         cmd += ["--offset", str(offset)]
@@ -52,6 +76,12 @@ def run_client(pid, offset=None):
 
 
 def main():
+    """
+    Executa a simulação de vários ciclos do algoritmo de Berkeley:
+    - Para cada ciclo, roda o coordenador e todos os clientes
+    - Aguarda todos finalizarem
+    - Registra progresso no terminal
+    """
     print(
         f"⏳ Iniciando {NUM_CICLOS} ciclos de sincronização com {NUM_CLIENTES} clientes...\n"
     )
