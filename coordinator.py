@@ -116,9 +116,7 @@ def main():
     if len(offsets) > 1:
         mean = statistics.mean(offsets)
         stdev = statistics.stdev(offsets)
-        filtered = [
-            (conn, o) for conn, o in received_offsets if abs(o - mean) <= 2 * stdev
-        ]
+        filtered = [(conn, o) for conn, o in received_offsets if abs(o - mean) <= stdev]
         log(f"Outliers removidos: {len(received_offsets) - len(filtered)}")
     else:
         filtered = received_offsets
