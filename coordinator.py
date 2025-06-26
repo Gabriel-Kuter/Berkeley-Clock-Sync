@@ -4,6 +4,8 @@ import time
 from datetime import datetime
 import argparse
 import statistics
+import os
+import csv
 
 """
 Coordenador do Algoritmo de Berkeley para sincronização de relógios em sistemas distribuídos.
@@ -24,6 +26,34 @@ received_lock = threading.Lock()
 def log(msg):
     """Imprime mensagem com timestamp formatado."""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+
+def persist_offset(offset: float):
+    """
+    Salva o offset atual do coordenador em arquivo local (coordinator.txt)
+    e atualiza o histórico de ciclos no CSV (coordinator.csv)
+    """
+    try:
+        with open("offset_coordinator.txt", "w") as f:
+            f.write(f"{offset:+.3f}")
+    except Exception as e:
+        log(f"[Coordenador] Erro ao salvar offset: {e}")
+
+    try:
+        csv_path = "offset_coordinator.csv"
+        file_exists = os.path.isfile(csv_path)
+        next_cycle = 1
+        if file_exists:
+            with open(csv_path, "r") as f:
+                last_line = list(csv.reader(f))[-1]
+                next_cycle = int(last_line[0]) + 1
+        with open(csv_path, "a", newline="") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["cycle", "offset"])
+            writer.writerow([next_cycle, round(offset, 6)])
+    except Exception as e:
+        log(f"[Coordenador] Erro ao gravar CSV: {e}")
 
 
 def handle_client(conn, addr):
@@ -71,6 +101,7 @@ def main():
     - Inicia threads para cada cliente conectado
     - Coleta offsets e calcula média
     - Remove outliers e envia ajustes aos clientes
+    - Aplica ajuste no próprio relógio e persiste valor
     """
     parser = argparse.ArgumentParser(description="Coordenador do algoritmo de Berkeley")
     parser.add_argument("--host", type=str, default="0.0.0.0")
@@ -112,7 +143,7 @@ def main():
     offsets.append(0.0)  # coordenador
     log(f"Offset do coordenador (0.000s) incluído no cálculo")
 
-    # Remove outliers: offsets fora de 2 desvios padrão
+    # Remove outliers: offsets fora de 1 desvio padrão
     if len(offsets) > 1:
         mean = statistics.mean(offsets)
         stdev = statistics.stdev(offsets)
@@ -129,6 +160,14 @@ def main():
     final_offsets = [o for _, o in filtered] + [0.0]
     offset_medio = statistics.mean(final_offsets)
     log(f"Offset médio final: {offset_medio:+.3f} segundos")
+
+    # Aplica o ajuste ao próprio coordenador e salva
+    adjusted_time = time.time() + offset_medio
+    log(f"Relógio do coordenador ajustado em {offset_medio:+.3f}s")
+    log(
+        f"Novo horário do coordenador: {datetime.fromtimestamp(adjusted_time).strftime('%H:%M:%S')}"
+    )
+    persist_offset(offset_medio)
 
     # Envia o ajuste calculado para cada cliente
     for conn, o in filtered:
